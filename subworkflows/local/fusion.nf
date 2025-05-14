@@ -1,7 +1,8 @@
 include { ARRIBA_ARRIBA                     } from '../../modules/nf-core/arriba/arriba/main'
+include { ARRIBA_PROCESS_BAM                } from '../../modules/local/process_star_bam/arriba/main'
 include { STAR_ALIGN as STAR_FOR_STARFUSION } from '../../modules/nf-core/star/align/main'
 include { STARFUSION                        } from '../../modules/local/starfusion/detect/main'
-include { STARFUSION_PROCESS_BAM            } from '../../modules/local/starfusion_process_bam/main'
+include { STARFUSION_PROCESS_BAM            } from '../../modules/local/process_star_bam/starfusion/main'
 include { FUSIONCATCHER_DETECT              } from '../../modules/local/fusioncatcher/detect/main'
 include { FUSIONCATCHER_PROCESS_SAM         } from '../../modules/local/fusioncatcher_process_sam/main'
 include { ONCOKB_FUSIONANNOTATOR            } from '../../modules/local/oncokb/fusionannotator/main'
@@ -13,6 +14,8 @@ include { CAT_CAT as MERGE_CFF              } from '../../modules/nf-core/cat/ca
 include { METAFUSION_RUN                    } from '../../modules/local/metafusion/run/main'
 include { ADD_FLAG                          } from '../../modules/local/add_flags/main'
 include { CFF_ANNOTATE as CFF_FINALIZE      } from '../../modules/local/cff_annotate/main'
+include { SAMTOOLS_INDEX as SAM_INDEX_ARRIBA;
+          SAMTOOLS_INDEX as SAM_INDEX_SF   } from '../../modules/nf-core/samtools/index/main'
 
 workflow FUSION {
 
@@ -53,6 +56,14 @@ workflow FUSION {
     )
     ch_versions = ch_versions.mix(ARRIBA_ARRIBA.out.versions.first())
 
+    ARRIBA_PROCESS_BAM(
+        ARRIBA_ARRIBA.out.fusions
+                    .map{ meta, file -> [ meta, file ] },
+        bam,
+        star_index
+    )
+    SAM_INDEX_ARRIBA(ARRIBA_PROCESS_BAM.out.arriba_bam)
+
     STAR_FOR_STARFUSION(
         reads,
         // use the star index in the starfusion reference to ensure compatibility
@@ -79,6 +90,8 @@ workflow FUSION {
                     .map{ meta, file -> [ meta, file ] },
         starfusion_ref
     )
+
+    SAM_INDEX_SF(STARFUSION_PROCESS_BAM.out.starfusion_bam)
 
     FUSIONCATCHER_DETECT(
         reads_untrimmed,
