@@ -143,6 +143,7 @@ workflow PREPARE_REFERENCES {
     metafusion_blocklist = metafusion_blocklist
     metafusion_gene_bed = METAFUSION_GENEBED.out.metafusion_gene_bed
     metafusion_gene_info = METAFUSION_GENEINFO.out.metafusion_gene_info
+    arriba_cytobands   = ARRIBA_DOWNLOAD.out.cytobands
     arriba_blacklist   = ARRIBA_DOWNLOAD.out.blacklist
     arriba_known_fusions = ARRIBA_DOWNLOAD.out.known_fusions
     arriba_protein_domains = ARRIBA_DOWNLOAD.out.protein_domains

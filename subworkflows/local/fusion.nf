@@ -33,6 +33,7 @@ workflow FUSION {
     gene_bed
     gene_info
     blocklist
+    arriba_cytobands
     arriba_blacklist
     arriba_known_fusions
     arriba_protein_domains
@@ -174,6 +175,16 @@ workflow FUSION {
                 }
         )
     }
+    ch_finalcff = CFF_FINALIZE.out.filtered_cff
+
+    FUSVIZ(ARRIBA_PROCESS_BAM.out.arriba_bam
+                .join(SAM_INDEX_ARRIBA.out.bai,         by:0)
+                .join(CFF_FINALIZE.out.filtered_cff,    by:0),
+            gtf, ref_genome, arriba_cytobands, arriba_protein_domains
+    )
+    ch_fusviz_pdf = FUSVIZ.out.pdf
+
+    ch_versions = ch_versions.mix(FUSVIZ.out.versions.first())
     ch_versions = ch_versions.mix(ADD_FLAG.out.versions.first())
     ch_versions = ch_versions.mix(METAFUSION_RUN.out.versions.first())
     ch_versions = ch_versions.mix(ARRIBA_TO_CFF.out.versions.first())
@@ -182,4 +193,5 @@ workflow FUSION {
 
     emit:
     ch_versions
+    ch_finalcff
 }

@@ -108,6 +108,7 @@ workflow FORTE {
         PREPARE_REFERENCES.out.metafusion_gene_bed,
         PREPARE_REFERENCES.out.metafusion_gene_info,
         PREPARE_REFERENCES.out.metafusion_blocklist,
+        workflow.profile.toString().split(",").contains("test") ? Channel.of([]).first() : PREPARE_REFERENCES.out.arriba_cytobands,
         workflow.profile.toString().split(",").contains("test") ? Channel.of([]).first() : PREPARE_REFERENCES.out.arriba_blacklist,
         workflow.profile.toString().split(",").contains("test") ? Channel.of([]).first() : PREPARE_REFERENCES.out.arriba_known_fusions,
         workflow.profile.toString().split(",").contains("test") ? Channel.of([]).first() : PREPARE_REFERENCES.out.arriba_protein_domains,
