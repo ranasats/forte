@@ -9,6 +9,7 @@ process ARRIBA_DOWNLOAD {
 
     output:
     path "blacklist*"       , emit: blacklist
+    path "cytobands*"       , emit: cytobands
     path "protein_domains*" , emit: protein_domains
     path "known_fusions*"   , emit: known_fusions
     path "versions.yml"     , emit: versions
@@ -24,6 +25,7 @@ process ARRIBA_DOWNLOAD {
     tar -xzvf arriba_v2.3.0.tar.gz
     rm arriba_v2.3.0.tar.gz
     cp arriba_v2.3.0/database/blacklist_${prefix}_* .
+    cp arriba_v2.3.0/database/cytobands_${prefix}_* .
     cp arriba_v2.3.0/database/known_fusions_${prefix}_* .
     cp arriba_v2.3.0/database/protein_domains_${prefix}_* .
     rm -r arriba_v2.3.0
