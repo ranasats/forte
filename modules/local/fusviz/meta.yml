@@ -1,0 +1,92 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/modules/meta-schema.json
+name: "fusviz"
+description: "Fast and accurate gene fusion visualization from MSK-TARGET data"
+keywords:
+  - rna
+  - fusions
+  - msk-target
+  - visualization
+tools:
+  - "preFusViz.py":
+      description: "Parcer script to convert TARGET fusions file in to FusViz input file"
+      homepage: "None"
+      documentation: "None"
+      tool_dev_url: "None"
+      doi: ""
+      licence: ['MIT']
+      identifier: ""
+  - "FusViz.R":
+      description: "Heavily tailored from ARRIBA's original script draw_fusions.R to fit MSK-TARGET panel data"
+      homepage: "None"
+      documentation: "None"
+      tool_dev_url: "None"
+      doi: ""
+      licence: ['MIT']
+      identifier: ""
+input:
+  - - gtf:
+        type: file
+        description: Annotations file
+        pattern: "*.{gtf}"
+        ontologies:
+          - edam: "http://edamontology.org/format_2306"
+  - - cytobands:
+        type: file
+        description: Cytobands file
+        pattern: "*.{tsv}"
+        ontologies:
+          - edam: "http://edamontology.org/format_3475"
+  - - protein_domains:
+        type: file
+        description: Protein Domains file
+        pattern: "*.{gff3}"
+        ontologies:
+          - edam: "http://edamontology.org/format_1975"
+  - - meta:
+        type: map
+        description: |
+          Groovy Map containing sample information
+          e.g. `[ id:'sample1', single_end:false ]`
+    - tsv:
+        type: file
+        description: Fusions input file
+        pattern: "*.{tsv}"
+        ontologies:
+          - edam: "http://edamontology.org/format_3475"
+  - - meta2:
+        type: map
+        description: |
+          Groovy Map containing sample information
+          e.g. `[ id:'sample1', single_end:false ]`
+    - bam:
+        type: file
+        description: Sorted BAM file
+        pattern: "*.bam"
+        ontologies:
+          - edam: "http://edamontology.org/format_2572"
+    - bai:
+        type: file
+        description: BAM index file
+        pattern: "*.bai"
+        ontologies:
+          - edam: "http://edamontology.org/format_1412"
+output:
+  - - meta:
+        type: map
+        description: |
+          Groovy Map containing sample information
+          e.g. `[ id:'sample1', single_end:false ]`
+    - pdf:
+        type: file
+        description: Fusion visualization file in PDF format
+        pattern: "*.pdf"
+        ontologies:
+          - edam: "http://edamontology.org/format_3508"
+  - - versions:
+        type: file
+        description: File containing software versions
+        pattern: "versions.yml"
+authors:
+  - "@jblancoheredia <blancoj@mskcc.org>"
+maintainers:
+  - "@jblancoheredia <blancoj@mskcc.org>"
