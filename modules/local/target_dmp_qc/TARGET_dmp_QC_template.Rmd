@@ -1,0 +1,333 @@
+---
+title: "TARGETv1-VAL-20250008"
+author: "Caryn Hale"
+date: "`r Sys.Date()`"
+output: html_document
+params:
+  analysis_dir: ""
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggsci)
+library(ggpubr)
+library(tximport)
+library(ggh4x)
+library(viridis)
+library(rstatix)
+library(NatParksPalettes)
+library(ggrepel)
+library(plotly)
+library(beyonce)
+
+# wd <- "/Users/halec/crater2/dmp/dms/qc-data/TARGET/2025/TARGETv1-VAL-20250008/"
+# pool <- "TARGETv1-VAL-20250008"
+# samples <- list.files(wd)
+analysis_root <- params$analysis_dir
+sample_dirs <- list.dirs(analysis_root, full.names = TRUE, recursive = FALSE)
+samples <- basename(sample_dirs)
+
+# my_colors <- NatParksPalettes::natparks.pals("Banff", 7)[c(1,3, 4, 6, 7, 8, 2)]
+# more_colors <- NatParksPalettes::natparks.pals("BryceCanyon", 9)[c(1,3, 4, 6, 7, 8, 2)]
+my_colors <- beyonce_palette(18)
+
+```
+
+## Total Reads Sequenced
+
+This is the # of read pairs from the uncollapsed BAM file
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=6, fig.height=4}
+
+bam_stat_results_dup <- tibble()
+
+for (i in seq_along(samples)) {
+# wds <- file.path(paste(wd, samples[i], "/DEFAULT/forte/analysis/", samples[i], sep = ""))
+wds <- file.path(paste(analysis_root, samples[i], sep = ""))
+
+dup_file <- list.files(paste(wds, "/rseqc/dup/", sep = ""))
+bam_stat <- dup_file[grep("bam_stat", dup_file)]
+
+# setwd(paste(wds, "/rseqc/dup/", sep = ""))
+bam_stat_path <- file.path(wds, "rseqc", "dup", bam_stat)
+
+bam_stat_results_dup <- bind_rows(bam_stat_results_dup,
+                              read_tsv(bam_stat_path, col_names = FALSE, trim_ws = TRUE, skip = 4) %>%
+  mutate(X1 = str_squish(X1)) %>%
+  separate(X1, into = c("stat", "value"), sep = ": ") %>%
+  dplyr::filter(is.na(value)==FALSE) %>%
+  mutate(sample = samples[i]))
+}
+
+ggplotly(ggplot(data = bam_stat_results_dup %>%
+         dplyr::filter(stat == "Read-1") %>%
+           mutate(flag = if_else(as.numeric(value) < 50000000, "warn", "pass")),
+       aes(x = sample,
+           y = as.numeric(value),
+           fill = flag)) +
+  geom_bar(stat = "identity", position = position_dodge2(preserve = "single")) +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  scale_fill_manual(values = my_colors, name = "50M Reads?") +
+  scale_y_continuous(labels = scales::unit_format(unit = "M", scale = 1e-6, sep = "")) +
+  labs(y = "Total Reads", x = ""))
+```
+
+## Unique Reads (post-deduplication)
+
+This is the # of read pairs from the deduplicated BAM file
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=6, fig.height=4}
+bam_stat_results_dedup <- tibble()
+
+for (i in seq_along(samples)) {
+# wds <- file.path(paste(wd, samples[i], "/DEFAULT/forte/analysis/", samples[i], sep = ""))
+wds <- file.path(paste(analysis_root, samples[i], sep = ""))
+
+dedup_file <- list.files(paste(wds, "/rseqc/dedup/", sep = ""))
+bam_stat <- dedup_file[grep("bam_stat", dedup_file)]
+
+# setwd(paste(wds, "/rseqc/dedup/", sep = ""))
+bam_stat_path <- file.path(wds, "rseqc", "dedup", bam_stat)
+
+bam_stat_results_dedup <- bind_rows(bam_stat_results_dedup,
+                              read_tsv(bam_stat_path, col_names = FALSE, trim_ws = TRUE, skip = 4) %>%
+  mutate(X1 = str_squish(X1)) %>%
+  separate(X1, into = c("stat", "value"), sep = ": ") %>%
+  dplyr::filter(is.na(value)==FALSE) %>%
+  mutate(sample = samples[i]))
+}
+
+ggplotly(ggplot(data = bam_stat_results_dedup %>%
+         dplyr::filter(stat == "Read-1") %>%
+           mutate(flag = if_else(as.numeric(value) < 10000000, "fail", 
+                                 if_else(between(as.numeric(value), 10000001, 50000000)==TRUE, "warn", "pass"))),
+       aes(x = sample,
+           y = as.numeric(value),
+           fill = flag)) +
+  geom_bar(stat = "identity", position = position_dodge2(preserve = "single", width = .9)) +
+  theme_bw() +
+  theme(plot.margin = unit(c(.5,.5,.5,.5), "cm")) +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  scale_fill_manual(values = my_colors, name = "QC flag") +
+  geom_hline(yintercept = 10000000, color = "red", linetype = "dashed") +
+  scale_y_continuous(labels = scales::unit_format(unit = "M", scale = 1e-6, sep = "")) +
+  labs(y = "Unique Reads", x = ""))
+```
+
+## Total vs Unique Reads
+
+In order to see the amount of collapse that occurred in the deduplication (this is a combination of the two previous graphs)
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=6, fig.height=4}
+reads_both <- bind_rows(
+  bam_stat_results_dup %>%
+    mutate(type = "total"),
+  bam_stat_results_dedup %>%
+    mutate(type = "unique")
+) %>%
+  dplyr::filter(stat == "Read-1")
+
+ggplot(data = reads_both,
+       aes(x = sample,
+           y = as.numeric(value),
+           fill = type)) +
+  geom_bar(stat = "identity", position = position_dodge2(preserve = "single", width = .9)) +
+  theme_bw() +
+  scale_fill_manual(name = "read type", values = my_colors[c(1, 5)]) +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  #facet_wrap(~type, scales = "free_x") +
+  scale_y_continuous(labels = scales::unit_format(unit = "M", scale = 1e-6, sep = "")) +
+  labs(y = "reads", x = "sample")
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=10, fig.height=4}
+picard_dedup_results <- tibble()
+
+for (i in seq_along(samples)) {
+# wds <- file.path(paste(wd, samples[i], "/DEFAULT/forte/analysis/", samples[i], sep = ""))
+wds <- file.path(paste(analysis_root, samples[i], sep = ""))
+
+picard_dedup_file <- list.files(paste(wds, "/picard/dedup/", sep = ""))
+RNAmetrics.file <- picard_dedup_file[grep("rna_metrics", picard_dedup_file)]
+
+# setwd(paste(wds, "/picard/dedup/", sep = ""))
+RNAmetrics_path <- file.path(wds, "picard", "dedup", RNAmetrics.file)
+
+picard_dedup_results <- bind_rows(picard_dedup_results,
+                              read_tsv(RNAmetrics_path,
+                                       skip = 6)[1,]  %>%
+                                type_convert() %>%
+                                mutate(sample = samples[i]))
+}
+
+```
+
+
+## Mapping Statistics
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=7.5, fig.height=4}
+regions <- picard_dedup_results %>%
+  dplyr::select(sample, PCT_RIBOSOMAL_BASES, PCT_CODING_BASES, PCT_UTR_BASES, PCT_INTRONIC_BASES, PCT_INTERGENIC_BASES) %>%
+  pivot_longer(cols = 2:6,
+               names_to = "region",
+               values_to = "pct") %>%
+         mutate(region = gsub("PCT_", "", region)) %>%
+         mutate(region = gsub("_BASES", "", region))
+
+ggplot(data = regions,
+       aes(x = sample,
+           y = pct,
+           fill = region)) +
+  geom_bar(position = "stack", stat = "identity") +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  scale_fill_manual(values = my_colors) +
+  theme(plot.margin = unit(c(1,1,1,1.5), "cm")) +
+  labs(x = "",
+       y = "fraction")
+
+
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=7.5, fig.height=4}
+ggplotly(ggplot(data = regions %>%
+         filter(region == "CODING") %>%
+         mutate(flag = if_else(pct < .8, "warn", "pass")),
+       aes(x = sample,
+           y = pct*100,
+           fill = flag)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = my_colors, name = "QC flag") +
+  theme_bw() +
+  geom_hline(yintercept = 80, color = "red", linetype = "dashed") +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  labs(x = "sample", y = "% coding reads", title = "Coding Reads"))
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=7.5, fig.height=4}
+ggplotly(ggplot(data = regions %>%
+         filter(region == "INTERGENIC") %>%
+         mutate(flag = if_else(pct > .02, "warn", "pass")),
+       aes(x = sample,
+           y = pct*100,
+           fill = flag)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = my_colors, name = "QC flag") +
+  theme_bw() +
+  geom_hline(yintercept = 2, color = "red", linetype = "dashed") +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  labs(x = "sample", y = "% intergenic reads", title = "Intergenic Reads"))
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=7.5, fig.height=4}
+ggplotly(ggplot(data = regions %>%
+         filter(region == "INTRONIC") %>%
+         mutate(flag = if_else(pct > .05, "warn", "pass")),
+       aes(x = sample,
+           y = pct*100,
+           fill = flag)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = my_colors, name = "QC flag") +
+  theme_bw() +
+  geom_hline(yintercept = 5, color = "red", linetype = "dashed") +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  labs(x = "sample", y = "% intronic reads", title = "Intronic Reads"))
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=7.5, fig.height=4}
+ggplotly(ggplot(data = regions %>%
+         filter(region == "RIBOSOMAL") %>%
+         mutate(flag = if_else(pct > .001, "warn", "pass")),
+       aes(x = sample,
+           y = pct*100,
+           fill = flag)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = my_colors, name = "QC flag") +
+  theme_bw() +
+  geom_hline(yintercept = .1, color = "red", linetype = "dashed") +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  labs(x = "sample", y = "% ribosomal reads", title = "Ribosomal Reads"))
+```
+
+
+## Detected genes (tpm \> 2)
+
+This is the number of genes detected by pseudoalignment with a deduplicated tpm > 2
+
+```{r eval=TRUE, echo = FALSE, fig.height=4, fig.width=6, message=FALSE, warning=FALSE, include=TRUE}
+tx2gene <- read_tsv("/research/huynhn3/projects/target_qc/forte/modules/local/target_dmp_qc/Homo_sampiens_tx2gene_Ensembl_v111.tsv")
+
+# kallisto_files <- Sys.glob(file.path(paste(wd, "*/DEFAULT/forte/analysis/*/kallisto/abundance.h5", sep = "")))
+# setwd(wd)
+# kallisto_files2 <- gsub(wd, "", kallisto_files)
+kallisto_files <- Sys.glob(file.path(analysis_root, "*", "kallisto", "abundance.h5"))
+
+txi <- tximport(kallisto_files, type = "kallisto", tx2gene = tx2gene, ignoreTxVersion = TRUE)
+
+# save(txi, file = "~/Desktop/txi.RData")
+# load(file = "~/Desktop/txi.RData")
+```
+
+```{r eval=TRUE, echo = FALSE, fig.height=4, fig.width=6, message=FALSE, warning=FALSE, include=TRUE}
+abundance <- data.frame(txi$abundance)
+names(abundance) <- samples
+
+abundance_current <- abundance
+
+abundance_num_genes <- abundance %>%
+  as_tibble(rownames = "Gene") %>%
+  pivot_longer(2:(dim(abundance)[2] + 1), names_to = "sample", values_to = "tpm") %>%
+  dplyr::filter(tpm > 2)
+
+summary <- abundance %>%
+  as_tibble(rownames = "Gene") %>%
+  pivot_longer(2:(dim(abundance)[2] + 1), names_to = "sample", values_to = "tpm") %>%
+  dplyr::filter(tpm > 2) %>%
+  group_by(sample) %>%
+  summarise(genes = n())
+
+ggplot(data = summary,
+       aes(x = sample,
+           y = genes,
+           fill = sample)) +
+  geom_bar(stat = "identity", position = position_dodge2(preserve = "single")) +
+  scale_fill_manual(values = my_colors) +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  labs(x = "", y = "# of genes (tpm > 2)")
+
+```
+
+
+## Spliced Reads
+
+We calculate the number of spliced reads detected. This is an indication of RNA purity and quality.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=7, fig.height=4}
+spliced_reads <- bam_stat_results_dedup %>%
+  dplyr::filter(stat %in% c("Non-splice reads", "Splice reads")) %>%
+  mutate(value = as.numeric(value)) %>%
+  pivot_wider(names_from = stat,
+              values_from = value) %>%
+  mutate(percent_spliced = `Splice reads` / (`Splice reads` + `Non-splice reads`))
+
+ggplot(data = spliced_reads %>%
+         mutate(flag = if_else(percent_spliced < .4, "warn", "pass")),
+       aes(x = sample,
+           y = percent_spliced*100,
+           fill = flag)) +
+  geom_col() +
+  scale_fill_manual(values = my_colors, name = "QC flag") +
+  labs(y = "% spliced reads", x = "") +
+  theme_bw() +
+  geom_hline(yintercept = 40, color = "red", linetype = "dashed") +
+  theme(axis.text.x=element_text(angle=45, hjust=1))
+```

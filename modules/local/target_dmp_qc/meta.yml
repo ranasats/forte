@@ -1,0 +1,13 @@
+name: target_dmp_qc
+description: Generate a QC report from the Forte pipeline.
+inputs:
+  - name: target_dmp_qc_rmd
+    type: path
+    description: Path to the TARGET QC R markdown file.
+  - name: analysis_dir
+    type: path
+    description: Path to the /analysis directory with sample subfolders.
+outputs:
+  - name: html_report
+    type: path
+    description: The rendered TARGET_QC_report.html file.

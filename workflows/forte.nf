@@ -18,11 +18,12 @@ include { EXTRACT_DEDUP_FQ                  } from '../subworkflows/local/extrac
 include { QUANTIFICATION                    } from '../subworkflows/local/quantification'
 include { FUSION                            } from '../subworkflows/local/fusion'
 include { FILLOUT                           } from '../subworkflows/local/fillout'
-include { SPLICING                          } from '../subworkflows/local/splicing'
 include { paramsSummaryMap       } from 'plugin/nf-schema'
 include { paramsSummaryMultiqc   } from '../subworkflows/nf-core/utils_nfcore_pipeline'
 include { softwareVersionsToYAML } from '../subworkflows/nf-core/utils_nfcore_pipeline'
 include { methodsDescriptionText } from '../subworkflows/local/utils_nfcore_forte_pipeline'
+
+include { TARGET_DMP_QC } from '../modules/local/target_dmp_qc'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -112,18 +113,9 @@ workflow FORTE {
         workflow.profile.toString().split(",").contains("test") ? Channel.of([]).first() : PREPARE_REFERENCES.out.arriba_blacklist,
         workflow.profile.toString().split(",").contains("test") ? Channel.of([]).first() : PREPARE_REFERENCES.out.arriba_known_fusions,
         workflow.profile.toString().split(",").contains("test") ? Channel.of([]).first() : PREPARE_REFERENCES.out.arriba_protein_domains,
-        params.clinical_genes,
-        params.transcript_allowlist
+        params.clinicalgenes
     )
     ch_versions = ch_versions.mix(FUSION.out.ch_versions)
-
-    SPLICING(
-        ALIGN_READS.out.bam,
-        PREPARE_REFERENCES.out.star_index.map{meta, star_index ->
-            [meta, file(star_index.toString() + "/sjdbList.out.tab")]
-        },
-        PREPARE_REFERENCES.out.fasta
-    )
 
     FILLOUT(
         ALIGN_READS.out.bam,
@@ -217,7 +209,7 @@ workflow FORTE {
     )
 
     MULTIQC (
-        ch_multiqc_files.collect().map{files -> [[:], files] },
+        ch_multiqc_files.collect(),
         ch_multiqc_config.toList(),
         ch_multiqc_custom_config.toList(),
         ch_multiqc_logo.toList(),
@@ -225,8 +217,16 @@ workflow FORTE {
         []
     )
 
-    emit:multiqc_report = MULTIQC.out.report.toList() // channel: /path/to/multiqc_report.html
-    versions       = ch_versions                 // channel: [ path(versions.yml) ]
+    target_dmp_qc_rmd = file("${baseDir}/modules/local/target_dmp_qc/TARGET_dmp_QC_template.Rmd")
+    TARGET_DMP_QC(
+        target_dmp_qc_rmd,
+        file("${params.outdir}/analysis")
+    )
+
+    emit:
+        multiqc_report     = MULTIQC.out.report.toList() // channel: /path/to/multiqc_report.html
+        versions           = ch_versions                 // channel: [ path(versions.yml) ]
+        target_qc_report   = TARGET_DMP_QC.out           
 
 }
 
