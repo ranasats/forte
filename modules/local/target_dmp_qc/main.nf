@@ -6,13 +6,17 @@ process TARGET_DMP_QC {
 
     input:
       path target_dmp_qc_rmd
-      path analysis_dir
+      path(sample_dirs)
 
     output:
       path "TARGET_QC_report.html"
 
     shell:
       """
-      Rscript -e "rmarkdown::render('${target_dmp_qc_rmd}', output_file='TARGET_QC_report.html', params=list(analysis_dir='${analysis_dir}'))"
+      Rscript -e "rmarkdown::render(
+        '${target_dmp_qc_rmd}',
+        output_file='TARGET_QC_report.html',
+        params=list(sample_dirs=c(${sample_dirs.collect { \"'${it}'\" }.join(',')}))
+      )"
       """
 }

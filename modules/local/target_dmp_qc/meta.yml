@@ -4,9 +4,10 @@ inputs:
   - name: target_dmp_qc_rmd
     type: path
     description: Path to the TARGET QC R markdown file.
-  - name: analysis_dir
+  - name: sample_dirs
     type: path
-    description: Path to the /analysis directory with sample subfolders.
+    multiple: true
+    description: List of paths to individal sample analysis directories.
 outputs:
   - name: html_report
     type: path
