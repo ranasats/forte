@@ -13,6 +13,7 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
+
 include { getGenomeAttribute      } from './subworkflows/local/utils_nfcore_forte_pipeline'
 
 params.fasta                  = getGenomeAttribute('fasta')
@@ -28,7 +29,8 @@ params.metafusion_blocklist   = getGenomeAttribute('metafusion_blocklist')
 params.metafusion_gene_bed    = getGenomeAttribute('metafusion_gene_bed')
 params.metafusion_gene_info   = getGenomeAttribute('metafusion_gene_info')
 params.ensembl_version        = getGenomeAttribute('ensembl_version')
-params.clinicalgenes          = getGenomeAttribute('clinicalgenes')
+params.transcript_allowlist   = getGenomeAttribute('transcript_allowlist')
+params.clinical_genes         = getGenomeAttribute('clinical_genes')
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -65,8 +67,7 @@ workflow MSKCC_FORTE {
         maf_samplesheet
     )
     emit:
-        multiqc_report = FORTE.out.multiqc_report // channel: /path/to/multiqc_report.html
-        target_qc_report = FORTE.out.target_qc_report
+    multiqc_report = FORTE.out.multiqc_report // channel: /path/to/multiqc_report.html
 }
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
