@@ -4,7 +4,7 @@ author: "Caryn Hale"
 date: "`r Sys.Date()`"
 output: html_document
 params:
-  analysis_dir: ""
+  sample_dirs: !r character()
 ---
 
 ```{r setup, include=FALSE}
@@ -24,9 +24,10 @@ library(beyonce)
 # wd <- "/Users/halec/crater2/dmp/dms/qc-data/TARGET/2025/TARGETv1-VAL-20250008/"
 # pool <- "TARGETv1-VAL-20250008"
 # samples <- list.files(wd)
-analysis_root <- params$analysis_dir
-sample_dirs <- list.dirs(analysis_root, full.names = TRUE, recursive = FALSE)
+sample_dirs <- params$sample_dirs
+sample_dirs <- normalizePath(sample_dirs, mustWork = TRUE)
 samples <- basename(sample_dirs)
+sample_map <- tibble(sample = samples, sample_dir = sample_dirs)
 
 # my_colors <- NatParksPalettes::natparks.pals("Banff", 7)[c(1,3, 4, 6, 7, 8, 2)]
 # more_colors <- NatParksPalettes::natparks.pals("BryceCanyon", 9)[c(1,3, 4, 6, 7, 8, 2)]
@@ -44,7 +45,7 @@ bam_stat_results_dup <- tibble()
 
 for (i in seq_along(samples)) {
 # wds <- file.path(paste(wd, samples[i], "/DEFAULT/forte/analysis/", samples[i], sep = ""))
-wds <- file.path(paste(analysis_root, samples[i], sep = ""))
+wds <- sample_map$sample_dir[i]
 
 dup_file <- list.files(paste(wds, "/rseqc/dup/", sep = ""))
 bam_stat <- dup_file[grep("bam_stat", dup_file)]
@@ -84,7 +85,7 @@ bam_stat_results_dedup <- tibble()
 
 for (i in seq_along(samples)) {
 # wds <- file.path(paste(wd, samples[i], "/DEFAULT/forte/analysis/", samples[i], sep = ""))
-wds <- file.path(paste(analysis_root, samples[i], sep = ""))
+wds <- sample_map$sample_dir[i]
 
 dedup_file <- list.files(paste(wds, "/rseqc/dedup/", sep = ""))
 bam_stat <- dedup_file[grep("bam_stat", dedup_file)]
@@ -149,7 +150,7 @@ picard_dedup_results <- tibble()
 
 for (i in seq_along(samples)) {
 # wds <- file.path(paste(wd, samples[i], "/DEFAULT/forte/analysis/", samples[i], sep = ""))
-wds <- file.path(paste(analysis_root, samples[i], sep = ""))
+wds <- sample_map$sample_dir[i]
 
 picard_dedup_file <- list.files(paste(wds, "/picard/dedup/", sep = ""))
 RNAmetrics.file <- picard_dedup_file[grep("rna_metrics", picard_dedup_file)]
@@ -268,7 +269,7 @@ tx2gene <- read_tsv("/research/huynhn3/projects/target_qc/forte/modules/local/ta
 # kallisto_files <- Sys.glob(file.path(paste(wd, "*/DEFAULT/forte/analysis/*/kallisto/abundance.h5", sep = "")))
 # setwd(wd)
 # kallisto_files2 <- gsub(wd, "", kallisto_files)
-kallisto_files <- Sys.glob(file.path(analysis_root, "*", "kallisto", "abundance.h5"))
+kallisto_files <- file.path(sample_dirs, "kallisto", "abundance.h5")
 
 txi <- tximport(kallisto_files, type = "kallisto", tx2gene = tx2gene, ignoreTxVersion = TRUE)
 
