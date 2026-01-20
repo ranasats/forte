@@ -22,8 +22,7 @@ include { paramsSummaryMap       } from 'plugin/nf-schema'
 include { paramsSummaryMultiqc   } from '../subworkflows/nf-core/utils_nfcore_pipeline'
 include { softwareVersionsToYAML } from '../subworkflows/nf-core/utils_nfcore_pipeline'
 include { methodsDescriptionText } from '../subworkflows/local/utils_nfcore_forte_pipeline'
-
-include { TARGET_DMP_QC } from '../modules/local/target_dmp_qc'
+include { TARGET_DMP_QC as TARGET_DMP_QC_WORKFLOW } from '../subworkflows/local/target_dmp_qc'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -36,197 +35,226 @@ workflow FORTE {
     take:
     ch_samplesheet // channel: samplesheet read in from --input
     ch_maf_samplesheet // channel: samplesheet optionally read in from --maf_input
+
     main:
 
-    ch_samplesheet = ch_samplesheet
-        .groupTuple(by:[0])
-        .map{ meta, reads ->
-            def meta_clone = meta.clone()
-            meta_clone.has_umi = meta.umi == [] ? false : true
-            meta_clone.fq_num = reads.size()
-            def fastq_pair_id = (1..reads.size()).toList().collect{ "${meta.id}_T${it}" }
-            [meta_clone, reads, fastq_pair_id]
-        }.transpose()
-        .map{ meta, reads, fastq_pair_id ->
-            def meta_clone = meta.clone()
-            meta_clone.fastq_pair_id = fastq_pair_id
-            [meta_clone,reads]
-        }
+    workflow_name = params.workflow_name ?: "forte"
 
     ch_versions = Channel.empty()
-
     ch_multiqc_files = Channel.empty()
 
-    BAIT_INPUTS ()
+    switch(workflow_name) {
 
-    PREPARE_REFERENCES()
-    ch_versions = ch_versions.mix(PREPARE_REFERENCES.out.ch_versions)
+        case 'forte':
+        default:
+
+            ch_samplesheet = ch_samplesheet
+                .groupTuple(by:[0])
+                .map{ meta, reads ->
+                    def meta_clone = meta.clone()
+                    meta_clone.has_umi = meta.umi == [] ? false : true
+                    meta_clone.fq_num = reads.size()
+                    def fastq_pair_id = (1..reads.size()).toList().collect{ "${meta.id}_T${it}" }
+                    [meta_clone, reads, fastq_pair_id]
+                }.transpose()
+                .map{ meta, reads, fastq_pair_id ->
+                    def meta_clone = meta.clone()
+                    meta_clone.fastq_pair_id = fastq_pair_id
+                    [meta_clone,reads]
+                }
+
+            BAIT_INPUTS ()
+
+            PREPARE_REFERENCES()
+            ch_versions = ch_versions.mix(PREPARE_REFERENCES.out.ch_versions)
 
 
-    PREPROCESS_READS(
-        ch_samplesheet
-    )
-    ch_versions = ch_versions.mix(PREPROCESS_READS.out.ch_versions)
+            PREPROCESS_READS(
+                ch_samplesheet
+            )
+            ch_versions = ch_versions.mix(PREPROCESS_READS.out.ch_versions)
 
-    ALIGN_READS(
-        params.skip_trimming ? PREPROCESS_READS.out.reads_untrimmed : PREPROCESS_READS.out.reads_trimmed,
-        PREPARE_REFERENCES.out.star_index,
-        PREPARE_REFERENCES.out.gtf
-    )
-    ch_versions = ch_versions.mix(ALIGN_READS.out.ch_versions)
+            ALIGN_READS(
+                params.skip_trimming ? PREPROCESS_READS.out.reads_untrimmed : PREPROCESS_READS.out.reads_trimmed,
+                PREPARE_REFERENCES.out.star_index,
+                PREPARE_REFERENCES.out.gtf
+            )
+            ch_versions = ch_versions.mix(ALIGN_READS.out.ch_versions)
 
-    EXTRACT_DEDUP_FQ(
-        ALIGN_READS.out.bam
-            .filter{ meta, bam ->
-                meta.has_umi && params.dedup_umi_for_kallisto
-            }
-    )
-    ch_versions = ch_versions.mix(EXTRACT_DEDUP_FQ.out.ch_versions)
+            EXTRACT_DEDUP_FQ(
+                ALIGN_READS.out.bam
+                    .filter{ meta, bam ->
+                        meta.has_umi && params.dedup_umi_for_kallisto
+                    }
+            )
+            ch_versions = ch_versions.mix(EXTRACT_DEDUP_FQ.out.ch_versions)
 
-    QUANTIFICATION(
-        ALIGN_READS.out.bam,
-        ALIGN_READS.out.bai,
-        PREPARE_REFERENCES.out.gtf,
-        EXTRACT_DEDUP_FQ.out.dedup_reads
-            .mix(
-                params.skip_trimming ? PREPROCESS_READS.out.reads_untrimmed : PREPROCESS_READS.out.reads_trimmed
-                    .filter{ meta, reads -> ! ( meta.has_umi && params.dedup_umi_for_kallisto ) }
-            ),
-        PREPARE_REFERENCES.out.kallisto_index
-    )
-    ch_versions = ch_versions.mix(QUANTIFICATION.out.ch_versions)
+            QUANTIFICATION(
+                ALIGN_READS.out.bam,
+                ALIGN_READS.out.bai,
+                PREPARE_REFERENCES.out.gtf,
+                EXTRACT_DEDUP_FQ.out.dedup_reads
+                    .mix(
+                        params.skip_trimming ? PREPROCESS_READS.out.reads_untrimmed : PREPROCESS_READS.out.reads_trimmed
+                            .filter{ meta, reads -> ! ( meta.has_umi && params.dedup_umi_for_kallisto ) }
+                    ),
+                PREPARE_REFERENCES.out.kallisto_index
+            )
+            ch_versions = ch_versions.mix(QUANTIFICATION.out.ch_versions)
 
-    FUSION(
-        PREPROCESS_READS.out.reads_trimmed,
-        PREPROCESS_READS.out.reads_untrimmed,
-        ALIGN_READS.out.bam_withdup,
-        PREPARE_REFERENCES.out.star_index,
-        PREPARE_REFERENCES.out.fasta,
-        PREPARE_REFERENCES.out.gtf,
-        PREPARE_REFERENCES.out.starfusion_ref,
-        PREPARE_REFERENCES.out.fusioncatcher_ref,
-        PREPARE_REFERENCES.out.agfusion_db,
-        PREPARE_REFERENCES.out.pyensembl_cache,
-        PREPARE_REFERENCES.out.metafusion_gene_bed,
-        PREPARE_REFERENCES.out.metafusion_gene_info,
-        PREPARE_REFERENCES.out.metafusion_blocklist,
-        workflow.profile.toString().split(",").contains("test") ? Channel.of([]).first() : PREPARE_REFERENCES.out.arriba_blacklist,
-        workflow.profile.toString().split(",").contains("test") ? Channel.of([]).first() : PREPARE_REFERENCES.out.arriba_known_fusions,
-        workflow.profile.toString().split(",").contains("test") ? Channel.of([]).first() : PREPARE_REFERENCES.out.arriba_protein_domains,
-        params.clinicalgenes
-    )
-    ch_versions = ch_versions.mix(FUSION.out.ch_versions)
+            FUSION(
+                PREPROCESS_READS.out.reads_trimmed,
+                PREPROCESS_READS.out.reads_untrimmed,
+                ALIGN_READS.out.bam_withdup,
+                PREPARE_REFERENCES.out.star_index,
+                PREPARE_REFERENCES.out.fasta,
+                PREPARE_REFERENCES.out.gtf,
+                PREPARE_REFERENCES.out.starfusion_ref,
+                PREPARE_REFERENCES.out.fusioncatcher_ref,
+                PREPARE_REFERENCES.out.agfusion_db,
+                PREPARE_REFERENCES.out.pyensembl_cache,
+                PREPARE_REFERENCES.out.metafusion_gene_bed,
+                PREPARE_REFERENCES.out.metafusion_gene_info,
+                PREPARE_REFERENCES.out.metafusion_blocklist,
+                workflow.profile.toString().split(",").contains("test") ? Channel.of([]).first() : PREPARE_REFERENCES.out.arriba_blacklist,
+                workflow.profile.toString().split(",").contains("test") ? Channel.of([]).first() : PREPARE_REFERENCES.out.arriba_known_fusions,
+                workflow.profile.toString().split(",").contains("test") ? Channel.of([]).first() : PREPARE_REFERENCES.out.arriba_protein_domains,
+                params.clinicalgenes
+            )
+            ch_versions = ch_versions.mix(FUSION.out.ch_versions)
 
-    FILLOUT(
-        ALIGN_READS.out.bam,
-        ALIGN_READS.out.bai,
-        ch_maf_samplesheet,
-        PREPARE_REFERENCES.out.fasta.map{ it[1] }.first(),
-        PREPARE_REFERENCES.out.fasta_fai.map{ it[1] }.first()
-    )
-    ch_versions = ch_versions.mix(FILLOUT.out.ch_versions)
+            FILLOUT(
+                ALIGN_READS.out.bam,
+                ALIGN_READS.out.bai,
+                ch_maf_samplesheet,
+                PREPARE_REFERENCES.out.fasta.map{ it[1] }.first(),
+                PREPARE_REFERENCES.out.fasta_fai.map{ it[1] }.first()
+            )
+            ch_versions = ch_versions.mix(FILLOUT.out.ch_versions)
 
-    QC_DEDUP(
-        ALIGN_READS.out.bam_dedup,
-        ALIGN_READS.out.bai_dedup,
-        QUANTIFICATION.out.kallisto_log
-            .mix(QUANTIFICATION.out.kallisto_count_feature)
-            .filter{meta, log ->
-                meta.has_umi && params.dedup_umi_for_kallisto
-            }.mix(ALIGN_READS.out.umitools_dedup_log),
-        PREPARE_REFERENCES.out.refflat,
-        PREPARE_REFERENCES.out.rrna_interval_list,
-        PREPARE_REFERENCES.out.rseqc_bed,
-        PREPARE_REFERENCES.out.fasta,
-        PREPARE_REFERENCES.out.fasta_fai,
-        PREPARE_REFERENCES.out.fasta_dict,
-        BAIT_INPUTS.out.baits
-    )
-    ch_versions = ch_versions.mix(QC_DEDUP.out.ch_versions)
-
-    QC_DUP(
-        ALIGN_READS.out.bam_withdup,
-        ALIGN_READS.out.bai_withdup,
-        PREPROCESS_READS.out.fastp_json
-            .mix(ALIGN_READS.out.star_log_final)
-            .mix(
+            QC_DEDUP(
+                ALIGN_READS.out.bam_dedup,
+                ALIGN_READS.out.bai_dedup,
                 QUANTIFICATION.out.kallisto_log
                     .mix(QUANTIFICATION.out.kallisto_count_feature)
                     .filter{meta, log ->
-                        ! (meta.has_umi && params.dedup_umi_for_kallisto)
-                    }
-            ),
-        PREPARE_REFERENCES.out.refflat,
-        PREPARE_REFERENCES.out.rrna_interval_list,
-        PREPARE_REFERENCES.out.rseqc_bed,
-        PREPARE_REFERENCES.out.fasta,
-        PREPARE_REFERENCES.out.fasta_fai,
-        PREPARE_REFERENCES.out.fasta_dict,
-        BAIT_INPUTS.out.baits
-    )
+                        meta.has_umi && params.dedup_umi_for_kallisto
+                    }.mix(ALIGN_READS.out.umitools_dedup_log),
+                PREPARE_REFERENCES.out.refflat,
+                PREPARE_REFERENCES.out.rrna_interval_list,
+                PREPARE_REFERENCES.out.rseqc_bed,
+                PREPARE_REFERENCES.out.fasta,
+                PREPARE_REFERENCES.out.fasta_fai,
+                PREPARE_REFERENCES.out.fasta_dict,
+                BAIT_INPUTS.out.baits
+            )
+            ch_versions = ch_versions.mix(QC_DEDUP.out.ch_versions)
 
-    //
-    // Collate and save software versions
-    //
-    softwareVersionsToYAML(ch_versions)
-        .collectFile(
-            storeDir: "${params.outdir}/pipeline_info",
-            name:  'forte_software_'  + 'mqc_'  + 'versions.yml',
-            sort: true,
-            newLine: true
-        ).set { ch_collated_versions }
+            QC_DUP(
+                ALIGN_READS.out.bam_withdup,
+                ALIGN_READS.out.bai_withdup,
+                PREPROCESS_READS.out.fastp_json
+                    .mix(ALIGN_READS.out.star_log_final)
+                    .mix(
+                        QUANTIFICATION.out.kallisto_log
+                            .mix(QUANTIFICATION.out.kallisto_count_feature)
+                            .filter{meta, log ->
+                                ! (meta.has_umi && params.dedup_umi_for_kallisto)
+                            }
+                    ),
+                PREPARE_REFERENCES.out.refflat,
+                PREPARE_REFERENCES.out.rrna_interval_list,
+                PREPARE_REFERENCES.out.rseqc_bed,
+                PREPARE_REFERENCES.out.fasta,
+                PREPARE_REFERENCES.out.fasta_fai,
+                PREPARE_REFERENCES.out.fasta_dict,
+                BAIT_INPUTS.out.baits
+            )
+
+            //
+            // Collate and save software versions
+            //
+            softwareVersionsToYAML(ch_versions)
+                .collectFile(
+                    storeDir: "${params.outdir}/pipeline_info",
+                    name:  'forte_software_'  + 'mqc_'  + 'versions.yml',
+                    sort: true,
+                    newLine: true
+                ).set { ch_collated_versions }
 
 
-    //
-    // MODULE: MultiQC
-    //
-    ch_multiqc_config        = Channel.fromPath(
-        "$projectDir/assets/multiqc_config.yml", checkIfExists: true)
-    ch_multiqc_custom_config = params.multiqc_config ?
-        Channel.fromPath(params.multiqc_config, checkIfExists: true) :
-        Channel.empty()
-    ch_multiqc_logo          = params.multiqc_logo ?
-        Channel.fromPath(params.multiqc_logo, checkIfExists: true) :
-        Channel.empty()
+            //
+            // MODULE: MultiQC
+            //
+            ch_multiqc_config        = Channel.fromPath(
+                "$projectDir/assets/multiqc_config.yml", checkIfExists: true)
+            ch_multiqc_custom_config = params.multiqc_config ?
+                Channel.fromPath(params.multiqc_config, checkIfExists: true) :
+                Channel.empty()
+            ch_multiqc_logo          = params.multiqc_logo ?
+                Channel.fromPath(params.multiqc_logo, checkIfExists: true) :
+                Channel.empty()
 
-    summary_params      = paramsSummaryMap(
-        workflow, parameters_schema: "nextflow_schema.json")
-    ch_workflow_summary = Channel.value(paramsSummaryMultiqc(summary_params))
-    ch_multiqc_files = ch_multiqc_files.mix(
-        ch_workflow_summary.collectFile(name: 'workflow_summary_mqc.yaml'))
-    ch_multiqc_custom_methods_description = params.multiqc_methods_description ?
-        file(params.multiqc_methods_description, checkIfExists: true) :
-        file("$projectDir/assets/methods_description_template.yml", checkIfExists: true)
-    ch_methods_description                = Channel.value(
-        methodsDescriptionText(ch_multiqc_custom_methods_description))
+            summary_params      = paramsSummaryMap(
+                workflow, parameters_schema: "nextflow_schema.json")
+            ch_workflow_summary = Channel.value(paramsSummaryMultiqc(summary_params))
+            ch_multiqc_files = ch_multiqc_files.mix(
+                ch_workflow_summary.collectFile(name: 'workflow_summary_mqc.yaml'))
+            ch_multiqc_custom_methods_description = params.multiqc_methods_description ?
+                file(params.multiqc_methods_description, checkIfExists: true) :
+                file("$projectDir/assets/methods_description_template.yml", checkIfExists: true)
+            ch_methods_description                = Channel.value(
+                methodsDescriptionText(ch_multiqc_custom_methods_description))
 
-    ch_multiqc_files = ch_multiqc_files.mix(ch_collated_versions)
-    ch_multiqc_files = ch_multiqc_files.mix(
-        ch_methods_description.collectFile(
-            name: 'methods_description_mqc.yaml',
-            sort: true
-        )
-    )
+            ch_multiqc_files = ch_multiqc_files.mix(ch_collated_versions)
+            ch_multiqc_files = ch_multiqc_files.mix(
+                ch_methods_description.collectFile(
+                    name: 'methods_description_mqc.yaml',
+                    sort: true
+                )
+            )
 
-    MULTIQC (
-        ch_multiqc_files.collect(),
-        ch_multiqc_config.toList(),
-        ch_multiqc_custom_config.toList(),
-        ch_multiqc_logo.toList(),
-        [],
-        []
-    )
+            MULTIQC (
+                ch_multiqc_files.collect(),
+                ch_multiqc_config.toList(),
+                ch_multiqc_custom_config.toList(),
+                ch_multiqc_logo.toList(),
+                [],
+                []
+            )
 
-    target_dmp_qc_rmd = file("${baseDir}/modules/local/target_dmp_qc/TARGET_dmp_QC_template.Rmd")
-    TARGET_DMP_QC(
-        target_dmp_qc_rmd,
-        file("${params.outdir}/analysis")
-    )
+            break
+
+        case 'target_dmp_qc':
+
+            ch_target_dmp_qc_rmd = Channel.fromPath(params.target_dmp_qc_rmd, checkIfExists: true)
+
+            // sample_dirs can be list or comma separated string
+            def sample_dir_patterns = []
+            if (params.sample_dirs instanceof List) {
+                sample_dir_patterns = params.sample_dirs
+            } else {
+                sample_dir_patterns = params.sample_dirs.toString()
+                    .split(',')
+                    .collect { it.trim() }
+                    .findAll { it }
+            }
+
+            ch_sample_dirs = Channel.fromPath(sample_dir_patterns, type: 'dir', checkIfExists: true)
+
+            TARGET_DMP_QC_REPORT(
+                ch_target_dmp_qc_rmd,
+                ch_sample_dirs
+            )
+            ch_versions = ch_versions.mix(TARGET_DMP_QC_REPORT.out.ch_versions)
+
+            break
+    }
 
     emit:
         multiqc_report     = MULTIQC.out.report.toList() // channel: /path/to/multiqc_report.html
         versions           = ch_versions                 // channel: [ path(versions.yml) ]
-        target_qc_report   = TARGET_DMP_QC.out           
+        target_dmp_qc_report  = (workflow_name == 'target_dmp_qc') ? TARGET_DMP_QC_REPORT.out.html_report : Channel.empty()
 
 }
 
