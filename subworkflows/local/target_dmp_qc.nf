@@ -8,8 +8,6 @@ workflow TARGET_DMP_QC {
 
     main:
 
-    ch_versions = Channel.empty()
-
     sample_dirs_list = sample_dirs.collect()
 
     TARGET_DMP_QC_PROCESS(
@@ -17,9 +15,7 @@ workflow TARGET_DMP_QC {
         sample_dirs_list
     )
 
-    ch_versions = ch_versions.mix(TARGET_DMP_QC_PROCESS.out.versions)
-
     emit:
     html_report = TARGET_DMP_QC_PROCESS.out.html_report
-    ch_versions = ch_versions
+    ch_versions = Channel.empty()
 }

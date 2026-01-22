@@ -9,14 +9,15 @@ process TARGET_DMP_QC {
       path(sample_dirs)
 
     output:
-      path "TARGET_QC_report.html"
+      path "TARGET_QC_report.html", emit: html_report
 
     shell:
-      """
-      Rscript -e "rmarkdown::render(
-        '${target_dmp_qc_rmd}',
-        output_file='TARGET_QC_report.html',
-        params=list(sample_dirs=c(${sample_dirs.collect { \"'${it}'\" }.join(',')}))
-      )"
-      """
+    def r_vec = sample_dirs.collect { "'${it}'" }.join(',')
+    """
+    Rscript -e 'rmarkdown::render(
+      "${target_dmp_qc_rmd}",
+      output_file="TARGET_QC_report.html",
+      params=list(sample_dirs=c(${r_vec}))
+    )'
+    """
 }

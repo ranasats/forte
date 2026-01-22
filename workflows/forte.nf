@@ -32,21 +32,21 @@ include { TARGET_DMP_QC as TARGET_DMP_QC_WORKFLOW } from '../subworkflows/local/
 
 workflow FORTE {
 
-    take:
-    ch_samplesheet // channel: samplesheet read in from --input
-    ch_maf_samplesheet // channel: samplesheet optionally read in from --maf_input
-
     main:
 
     workflow_name = params.workflow_name ?: "forte"
 
     ch_versions = Channel.empty()
     ch_multiqc_files = Channel.empty()
+    ch_multiqc_report = Channel.empty()
+    ch_target_dmp_qc_report = Channel.empty()
 
     switch(workflow_name) {
 
         case 'forte':
-        default:
+
+            ch_samplesheet = Channel.fromPath(params.input, checkIfExists: true)
+            ch_maf_samplesheet = Channel.fromPath(params.maf_input, checkIfExists: true)
 
             ch_samplesheet = ch_samplesheet
                 .groupTuple(by:[0])
@@ -222,6 +222,7 @@ workflow FORTE {
                 [],
                 []
             )
+            ch_multiqc_report = MULTIQC.out.report.toList()
 
             break
 
@@ -242,20 +243,25 @@ workflow FORTE {
 
             ch_sample_dirs = Channel.fromPath(sample_dir_patterns, type: 'dir', checkIfExists: true)
 
-            TARGET_DMP_QC_REPORT(
+            TARGET_DMP_QC_WORKFLOW(
                 ch_target_dmp_qc_rmd,
                 ch_sample_dirs
             )
-            ch_versions = ch_versions.mix(TARGET_DMP_QC_REPORT.out.ch_versions)
+            ch_target_dmp_qc_report = TARGET_DMP_QC_WORKFLOW.out.html_report
+            ch_versions = ch_versions.mix(TARGET_DMP_QC_WORKFLOW.out.ch_versions)
 
             break
     }
 
     emit:
-        multiqc_report     = MULTIQC.out.report.toList() // channel: /path/to/multiqc_report.html
-        versions           = ch_versions                 // channel: [ path(versions.yml) ]
-        target_dmp_qc_report  = (workflow_name == 'target_dmp_qc') ? TARGET_DMP_QC_REPORT.out.html_report : Channel.empty()
+        multiqc_report        = ch_multiqc_report
+        target_dmp_qc_report  = ch_target_dmp_qc_report
+        versions              = ch_versions
 
+}
+
+workflow {
+    FORTE()
 }
 
 /*
