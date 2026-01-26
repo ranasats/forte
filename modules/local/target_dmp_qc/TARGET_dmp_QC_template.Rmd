@@ -32,6 +32,7 @@ sample_map <- tibble(sample = samples, sample_dir = sample_dirs)
 # my_colors <- NatParksPalettes::natparks.pals("Banff", 7)[c(1,3, 4, 6, 7, 8, 2)]
 # more_colors <- NatParksPalettes::natparks.pals("BryceCanyon", 9)[c(1,3, 4, 6, 7, 8, 2)]
 my_colors <- beyonce_palette(18)
+qc_flag_colors <- c(pass = my_colors[1], warn = my_colors[3], fail = my_colors[5])
 
 ```
 
@@ -104,7 +105,8 @@ bam_stat_results_dedup <- bind_rows(bam_stat_results_dedup,
 ggplotly(ggplot(data = bam_stat_results_dedup %>%
          dplyr::filter(stat == "Read-1") %>%
            mutate(flag = if_else(as.numeric(value) < 10000000, "fail", 
-                                 if_else(between(as.numeric(value), 10000001, 50000000)==TRUE, "warn", "pass"))),
+                                 if_else(between(as.numeric(value), 10000001, 50000000)==TRUE, "warn", "pass")),
+                                 flag = factor(flag, levels = c("pass", "warn", "fail"))),
        aes(x = sample,
            y = as.numeric(value),
            fill = flag)) +
@@ -112,7 +114,7 @@ ggplotly(ggplot(data = bam_stat_results_dedup %>%
   theme_bw() +
   theme(plot.margin = unit(c(.5,.5,.5,.5), "cm")) +
   theme(axis.text.x=element_text(angle=45, hjust=1)) +
-  scale_fill_manual(values = my_colors, name = "QC flag") +
+  scale_fill_manual(values = qc_flag_colors, name = "QC flag") +
   geom_hline(yintercept = 10000000, color = "red", linetype = "dashed") +
   scale_y_continuous(labels = scales::unit_format(unit = "M", scale = 1e-6, sep = "")) +
   labs(y = "Unique Reads", x = ""))
@@ -203,7 +205,7 @@ ggplotly(ggplot(data = regions %>%
            y = pct*100,
            fill = flag)) +
   geom_bar(stat = "identity") +
-  scale_fill_manual(values = my_colors, name = "QC flag") +
+  scale_fill_manual(values = qc_flag_colors, name = "QC flag") +
   theme_bw() +
   geom_hline(yintercept = 80, color = "red", linetype = "dashed") +
   theme(axis.text.x=element_text(angle=45, hjust=1)) +
@@ -219,7 +221,7 @@ ggplotly(ggplot(data = regions %>%
            y = pct*100,
            fill = flag)) +
   geom_bar(stat = "identity") +
-  scale_fill_manual(values = my_colors, name = "QC flag") +
+  scale_fill_manual(values = qc_flag_colors, name = "QC flag") +
   theme_bw() +
   geom_hline(yintercept = 2, color = "red", linetype = "dashed") +
   theme(axis.text.x=element_text(angle=45, hjust=1)) +
@@ -235,7 +237,7 @@ ggplotly(ggplot(data = regions %>%
            y = pct*100,
            fill = flag)) +
   geom_bar(stat = "identity") +
-  scale_fill_manual(values = my_colors, name = "QC flag") +
+  scale_fill_manual(values = qc_flag_colors, name = "QC flag") +
   theme_bw() +
   geom_hline(yintercept = 5, color = "red", linetype = "dashed") +
   theme(axis.text.x=element_text(angle=45, hjust=1)) +
@@ -251,7 +253,7 @@ ggplotly(ggplot(data = regions %>%
            y = pct*100,
            fill = flag)) +
   geom_bar(stat = "identity") +
-  scale_fill_manual(values = my_colors, name = "QC flag") +
+  scale_fill_manual(values = qc_flag_colors, name = "QC flag") +
   theme_bw() +
   geom_hline(yintercept = .1, color = "red", linetype = "dashed") +
   theme(axis.text.x=element_text(angle=45, hjust=1)) +
@@ -297,10 +299,8 @@ summary <- abundance %>%
 
 ggplot(data = summary,
        aes(x = sample,
-           y = genes,
-           fill = sample)) +
-  geom_bar(stat = "identity", position = position_dodge2(preserve = "single")) +
-  scale_fill_manual(values = my_colors) +
+           y = genes)) +
+  geom_bar(stat = "identity", fill = "grey70") +
   theme_bw() +
   theme(axis.text.x=element_text(angle=45, hjust=1)) +
   labs(x = "", y = "# of genes (tpm > 2)")
@@ -326,7 +326,7 @@ ggplot(data = spliced_reads %>%
            y = percent_spliced*100,
            fill = flag)) +
   geom_col() +
-  scale_fill_manual(values = my_colors, name = "QC flag") +
+  scale_fill_manual(values = qc_flag_colors, name = "QC flag") +
   labs(y = "% spliced reads", x = "") +
   theme_bw() +
   geom_hline(yintercept = 40, color = "red", linetype = "dashed") +
